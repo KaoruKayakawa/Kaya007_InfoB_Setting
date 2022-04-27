@@ -1,0 +1,76 @@
+■ 2021-04-21　機能変更に伴い、以下の変更が入った。
+a). ＤＢテーブル仕様変更
+・ 名称：APP_INFOB_SETTING
+・ 新規作成スクリプト：
+CREATE TABLE [dbo].[APP_INFOB_SETTING](
+	[FOLDERNM] [varchar](10) NOT NULL,
+	[KAIINCD] [nvarchar](max) NOT NULL,
+	[FLAG] [tinyint] NOT NULL,
+	[MEMO] [nvarchar](200) NULL,
+	[INSDAT] [datetime] NOT NULL,
+	[UPDAT] [datetime] NOT NULL,
+ CONSTRAINT [PK_APP_INFOB_SETTING] PRIMARY KEY CLUSTERED 
+(
+	[FOLDERNM] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+b). ＤＢテーブル新規追加
+・ 名称：APP_INFOB_SETTING_WORK_TEMPLATE
+・ 新規作成スクリプト：
+CREATE TABLE [dbo].[APP_INFOB_SETTING_WORK_TEMPLATE](
+	[FOLDERNM] [varchar](10) NOT NULL,
+	[KAIINCD_FROM] [int] NOT NULL,
+	[KAIINCD_TO] [int] NOT NULL,
+	[FLAG] [tinyint] NOT NULL
+) ON [PRIMARY]
+
+c). ＤＢストアドプロシージャ仕様変更
+・ 名称：BAT_RESET_APP_INFOB_KAIIN
+・ 変更スクリプト：
+ALTER PROCEDURE [dbo].[BAT_RESET_APP_INFOB_KAIIN]
+AS
+BEGIN
+	SET NOCOUNT ON;
+	
+	DECLARE @TranCnt int;  
+    SET @TranCnt = @@TRANCOUNT;
+
+	IF @TranCnt > 0  
+        SAVE TRANSACTION svpt_BAT_RESET_APP_INFOB_KAIIN_1;  
+    ELSE 
+        BEGIN TRANSACTION;  
+
+	BEGIN TRY
+		TRUNCATE TABLE APP_INFOB_KAIIN;
+
+		INSERT INTO APP_INFOB_KAIIN
+		SELECT
+			b.FOLDERNM,
+			a.KIM_KAIINCD,
+			b.FLAG
+		FROM KAIIN_M a
+		INNER JOIN #wt_BAT_RESET_APP_INFOB_KAIIN_1 b
+		ON a.KIM_KAIINCD BETWEEN b.KAIINCD_FROM AND b.KAIINCD_TO;
+
+		IF @TranCnt = 0
+            COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		IF @TranCnt = 0  
+            ROLLBACK TRANSACTION;
+		ELSE IF XACT_STATE() <> -1
+			ROLLBACK TRANSACTION svpt_BAT_RESET_APP_INFOB_KAIIN_1;
+
+		DECLARE @ErrMessage nvarchar(4000), @ErrSeverity int, @ErrState int;  
+  
+        SELECT @ErrMessage = ERROR_MESSAGE();  
+        SELECT @ErrSeverity = ERROR_SEVERITY();  
+        SELECT @ErrState = ERROR_STATE();  
+  
+        RAISERROR (@ErrMessage, @ErrSeverity, @ErrState ); 
+	END CATCH
+END
+
+d). web アプリ 「web_InfoB_Setting」、Setting.config 項目追加
+・ app_InfoB_Setting：アプリケーション app_InfoB_Setting 実行モジュール配置パス
